@@ -24,14 +24,14 @@ class BelongsToOptions < AssocOptions
     name
     @foreign_key = options[:foreign_key] || "#{name}_id".to_sym
     @primary_key = options[:primary_key] || :id
-    @class_name = options[:class_name] || name.capitalize
+    @class_name = options[:class_name] || name.to_s.capitalize
   end
 end
 
 class HasManyOptions < AssocOptions
   def initialize(name, self_class_name, options = {})
-    name = name.camelcase.singularize.underscore
-    @foreign_key = options[:foreign_key] || "#{self_class_name.camelcase.underscore}_id".to_sym
+    name = name.to_s.camelcase.singularize.underscore
+    @foreign_key = options[:foreign_key] || "#{self_class_name.to_s.camelcase.underscore}_id".to_sym
     @primary_key = options[:primary_key] || :id
     @class_name = options[:class_name] || name.capitalize
   end
@@ -41,7 +41,7 @@ module Associatable
   # Phase IIIb
   def belongs_to(name, options = {})
     belong_options = BelongsToOptions.new(name, options)
-    puts "empty reulst feiaore \n\n\n\n\n #{belong_options}"
+    assoc_options[name.to_sym] = belong_options
     define_method(name) do
       return nil unless self.send(belong_options.foreign_key)
       result = DBConnection.execute2(<<-SQL)
@@ -58,14 +58,28 @@ module Associatable
   end
 
   def has_many(name, options = {})
-    # ...
+    define_method(name) do
+      has_options = HasManyOptions.new(name, self.class, options)
+      p has_options
+      foreign_class = Kernel.const_get(has_options.class_name)
+      result = DBConnection.execute2(<<-SQL)
+        SELECT
+          *
+        FROM
+          #{has_options.class_name.downcase}s
+        WHERE
+          #{has_options.foreign_key} = #{self.id}
+        SQL
+      foreign_class.parse_all(result[1..-1])
+    end
   end
 
   def assoc_options
-    # Wait to implement this in Phase IVa. Modify `belongs_to`, too.
+    @assoc_options ||= {}
   end
 end
 
 class SQLObject
+  attr_reader :assoc_options
   extend Associatable
 end
